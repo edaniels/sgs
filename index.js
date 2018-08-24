@@ -190,7 +190,21 @@ class Compiler {
 						this.compileQueue.enqueue([this.cwd, ref]);						
 					}
 				})
+				data('link[compile-ref][rel="stylesheet"]').each((idx, t) => {
+					if (!this.compileQueue) {
+						return;
+					}
+					const ref = cheerio(t).attr('href');
+					cheerio(t).removeAttr('compile-ref');
+					if (!this.cache[path.join(this.cwd, ref)]) {
+						this.compileQueue.enqueue([this.cwd, ref]);						
+					}
+				})
 				result = data.html();
+				break;
+			};
+			case '.css': {
+				result = fs.readFileSync(absPath, 'utf8');
 				break;
 			};
 			default:
@@ -221,6 +235,9 @@ class Compiler {
 	const srcDir = path.join(rootDir, 'src');
 
 	const ctx = {
+		'buildInfo': {
+			'date': new Date(),
+		},
 		'$': cheerio,
 		'content': from => {
 			const filePath = path.join(srcDir, from);
@@ -243,6 +260,13 @@ class Compiler {
 			return arrCopy;
 		}
 	};
+
+	try {
+		ctx.buildInfo.revision = require('child_process')
+			.execSync(`cd ${process.argv[2]}; git rev-parse --short HEAD`)
+			.toString().trim()
+	} catch (ignored) {}
+
 	vm.createContext(ctx);
 
 	const indexRelPath = config.src || "index.html";
@@ -270,6 +294,7 @@ class Compiler {
 			}
 		} catch (err) {
 			console.error("error compiling", err)
+			process.exit(1);
 		}
 	}
 })();
