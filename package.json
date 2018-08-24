@@ -1,5 +1,5 @@
 {
-  "name": "staticjs",
+  "name": "sgs",
   "version": "0.0.1",
   "description": "",
   "main": "index.js",
@@ -9,14 +9,14 @@
   },
   "devDependencies": {},
   "bin": {
-    "staticjs": "./index.js"
+    "sgs": "./index.js"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/edaniels/staticjs.git"
+    "url": "git+https://github.com/edaniels/sgs.git"
   },
   "keywords": [
     "static",
@@ -28,7 +28,7 @@
   "author": "Eric Daniels",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/edaniels/staticjs/issues"
+    "url": "https://github.com/edaniels/sgs/issues"
   },
-  "homepage": "https://github.com/edaniels/staticjs#readme"
+  "homepage": "https://github.com/edaniels/sgs#readme"
 }
