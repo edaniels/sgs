@@ -137,9 +137,14 @@ class Compiler {
 
 		// extend ctx
 		this.vmCtx.compile = this.compile.bind(this);
+		this.vmCtx.compileDyn = this.compileDyn.bind(this);
 	}
 
-	compile(filePath) {
+	compileDyn(filePath) {
+		return this.compile(filePath, {dynamic: true})
+	}
+
+	compile(filePath, opts={}) {
 		const absPath = path.join(this.cwd, filePath);
 		if (this.cache[absPath]) {
 			return this.cache[absPath];
@@ -167,8 +172,10 @@ class Compiler {
 			};
 			case '.html': {
 				const data = cheerio.load(fs.readFileSync(absPath, 'utf8'), {_useHtmlParser2: true});
+				const localCtx = vm.createContext({ ...this.vmCtx });
+				localCtx.$ = data;
 				data('script[compile]').each((idx, s) => {
-					const result = vm.runInContext(`{${cheerio(s).html()}}`, this.vmCtx);
+					const result = vm.runInContext(`{${cheerio(s).html()}}`, localCtx);
 					cheerio(s).replaceWith(result);
 				});
 				data('a[compile-ref]').each((idx, t) => {
@@ -187,7 +194,9 @@ class Compiler {
 			default:
 				throw new Error("do not know how to compile " + filePath);
 		}
-		this.cache[absPath] = result;
+		if (!opts.dynamic) {
+			this.cache[absPath] = result;
+		}
 		return result;
 	}
 }
@@ -244,6 +253,7 @@ class Compiler {
 		let [baseDir, relPath] = compileQueue.dequeue();
 		compiler.cwd = baseDir;
 		try {
+			ctx.path = path.join('/', relPath);
 			let file = compiler.compile(relPath);
 			if (config.out) {
 				const outDir = path.join(rootDir, config.out);
