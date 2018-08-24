@@ -1,0 +1,34 @@
+{
+  "name": "staticjs",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.2",
+    "commonmark": "^0.28.1"
+  },
+  "devDependencies": {},
+  "bin": {
+    "staticjs": "./index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/edaniels/staticjs.git"
+  },
+  "keywords": [
+    "static",
+    "site",
+    "generator",
+    "javascript",
+    "fast"
+  ],
+  "author": "Eric Daniels",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/edaniels/staticjs/issues"
+  },
+  "homepage": "https://github.com/edaniels/staticjs#readme"
+}
