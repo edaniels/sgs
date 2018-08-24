@@ -151,7 +151,7 @@ class Compiler {
 				if (!content.template) {
 					throw new Error("content missing template; cannot compile");
 				}
-				const templateFile = path.join(this.srcDir, 'templates', content.template);
+				const templateFile = path.join(this.srcDir, content.template);
 				const data = cheerio.load(fs.readFileSync(templateFile, 'utf8'), {_useHtmlParser2: true});
 				const localCtx = vm.createContext({ ...this.vmCtx });
 				localCtx.content = content;
@@ -159,7 +159,10 @@ class Compiler {
 					const result = vm.runInContext(`{${cheerio(s).html()}}`, localCtx);
 					cheerio(s).replaceWith(result);
 				});
-				result = [data.html(), filePath.substr(0, filePath.lastIndexOf('.')) + ".html"];
+				filePath = content.out ?
+					path.join(path.dirname(filePath), content.out) :
+					filePath.substr(0, filePath.lastIndexOf('.')) + ".html";
+				result = [data.html(), filePath];
 				break;
 			};
 			case '.html': {
