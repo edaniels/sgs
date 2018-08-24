@@ -140,10 +140,8 @@ class Compiler {
 	}
 
 	compile(filePath) {
-		console.log("compiling", filePath);
 		const absPath = path.join(this.cwd, filePath);
 		if (this.cache[absPath]) {
-			console.log("serving", filePath, "from cache");
 			return this.cache[absPath];
 		}
 		let result;
@@ -161,7 +159,7 @@ class Compiler {
 					const result = vm.runInContext(`{${cheerio(s).html()}}`, localCtx);
 					cheerio(s).replaceWith(result);
 				});
-				result = [data.root(), filePath.substr(0, filePath.lastIndexOf('.')) + ".html"];
+				result = [data.html(), filePath.substr(0, filePath.lastIndexOf('.')) + ".html"];
 				break;
 			};
 			case '.html': {
@@ -174,9 +172,13 @@ class Compiler {
 					if (!this.compileQueue) {
 						return;
 					}
-					this.compileQueue.enqueue([this.cwd, cheerio(t).attr('compile-ref')]);
+					const ref = cheerio(t).attr('compile-ref');
+					cheerio(t).removeAttr('compile-ref');
+					if (!this.cache[path.join(this.cwd, ref)]) {
+						this.compileQueue.enqueue([this.cwd, ref]);						
+					}
 				})
-				result = data.root();
+				result = data.html();
 				break;
 			};
 			default:
@@ -248,11 +250,11 @@ class Compiler {
 				}
 				const outPath = path.join(outDir, relPath);
 				mkdirRSync(path.dirname(outPath));
-				await writeFile(outPath, file.html())
-				console.log("updated", outPath);
+				await writeFile(outPath, file)
+				console.info("updated", outPath);
 			}
 		} catch (err) {
-			console.log("error compiling", err)
+			console.error("error compiling", err)
 		}
 	}
 })();
