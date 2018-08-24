@@ -49,12 +49,19 @@ function parseContent(content) {
 
 const contentCache = {};
 
-function contentFromFile(filePath) {
-	if (contentCache[filePath]) {
-		return contentCache[filePath];
+function contentFromFile(dirPath, relPath) {
+	const absPath = path.join(dirPath, relPath);
+	let parsed;
+	if (contentCache[absPath]) {
+		parsed = contentCache[absPath];
+	} else {
+		parsed = parseContent(fs.readFileSync(absPath, 'utf8'));
+		contentCache[absPath] = parsed;
 	}
-	const parsed = parseContent(fs.readFileSync(filePath, 'utf8'));
-	contentCache[filePath] = parsed;
+	const extIdx = relPath.lastIndexOf('.');
+	parsed.fileName = extIdx < 0 ? path.basename(relPath) : path.basename(relPath.substr(0, extIdx));
+	parsed.baseFileName = extIdx < 0 ? relPath : relPath.substr(0, extIdx);
+	parsed.relPath = relPath;
 	return parsed;
 }
 
@@ -63,7 +70,10 @@ class Contents extends Array {
 		super(...arguments);
 	}
 
-	mostRecent(n, by='date') {
+	mostRecent(n=0, by='date') {
+		if (n <= 0 || n === undefined) {
+			n = this.length;
+		}
 		return this
 			.sort((left, right) => {
 		        const ld = new Date(left[by]);
@@ -79,19 +89,102 @@ class Contents extends Array {
 	}
 }
 
-function contentFromDirectory(dirPath) {
+function contentFromDirectory(baseDir, relPath) {
+	const dirPath = path.join(baseDir, relPath);
 	return new Contents(...fs.readdirSync(dirPath).map(filePath => {
-		return contentFromFile(path.join(dirPath, filePath));
+		return contentFromFile(baseDir, path.join(relPath, filePath));
 	}));
 }
 
-function compile(filePath, ctx) {
-	const data = cheerio.load(fs.readFileSync(filePath, 'utf8'), {_useHtmlParser2: true});
-	data('script[compile="offline"]').each((idx, s) => {
-		const result = vm.runInContext(cheerio(s).html(), ctx);
-		cheerio(s).replaceWith(result);
-	});
-	return data.root();
+class Queue {
+	constructor() {
+		this.q = new Array();
+	}
+
+	enqueue(elem) {
+		this.q.unshift(elem);
+	}
+
+	dequeue() {
+		return this.q.pop();
+	}
+
+	isEmpty() {
+		return this.q.length === 0;
+	}
+}
+
+function mkdirRSync(mkpath) {
+	if (mkpath.length === 0) {
+		return;
+	}
+	const lof = mkpath.lastIndexOf(path.sep);
+	if (lof != -1) {
+		mkdirRSync(mkpath.substr(0, lof))
+	}
+	if (!fs.existsSync(mkpath)) {
+		fs.mkdirSync(mkpath);
+	}
+}
+
+class Compiler {
+	constructor(srcDir, vmCtx, compileQueue) {
+		this.srcDir = srcDir;
+		this.cwd = '';
+		this.vmCtx = vmCtx;
+		this.compileQueue = compileQueue;
+		this.cache = {};
+
+		// extend ctx
+		this.vmCtx.compile = this.compile.bind(this);
+	}
+
+	compile(filePath) {
+		console.log("compiling", filePath);
+		const absPath = path.join(this.cwd, filePath);
+		if (this.cache[absPath]) {
+			console.log("serving", filePath, "from cache");
+			return this.cache[absPath];
+		}
+		let result;
+		switch (path.extname(filePath)) {
+			case '.md': {
+				const content = contentFromFile(this.cwd, filePath);
+				if (!content.template) {
+					throw new Error("content missing template; cannot compile");
+				}
+				const templateFile = path.join(this.srcDir, 'templates', content.template);
+				const data = cheerio.load(fs.readFileSync(templateFile, 'utf8'), {_useHtmlParser2: true});
+				const localCtx = vm.createContext({ ...this.vmCtx });
+				localCtx.content = content;
+				data('script[compile]').each((idx, s) => {
+					const result = vm.runInContext(`{${cheerio(s).html()}}`, localCtx);
+					cheerio(s).replaceWith(result);
+				});
+				result = [data.root(), filePath.substr(0, filePath.lastIndexOf('.')) + ".html"];
+				break;
+			};
+			case '.html': {
+				const data = cheerio.load(fs.readFileSync(absPath, 'utf8'), {_useHtmlParser2: true});
+				data('script[compile]').each((idx, s) => {
+					const result = vm.runInContext(`{${cheerio(s).html()}}`, this.vmCtx);
+					cheerio(s).replaceWith(result);
+				});
+				data('a[compile-ref]').each((idx, t) => {
+					if (!this.compileQueue) {
+						return;
+					}
+					this.compileQueue.enqueue([this.cwd, cheerio(t).attr('compile-ref')]);
+				})
+				result = data.root();
+				break;
+			};
+			default:
+				throw new Error("do not know how to compile " + filePath);
+		}
+		this.cache[absPath] = result;
+		return result;
+	}
 }
 
 // main
@@ -111,19 +204,17 @@ function compile(filePath, ctx) {
 	const config = JSON.parse(configStr);
 	const srcDir = path.join(rootDir, 'src');
 
-	const index = cheerio.load(await readFile(path.join(srcDir, 'index.html'), 'utf8'));
 	const ctx = {
 		'$': cheerio,
 		'content': from => {
 			const filePath = path.join(srcDir, from);
 			const stat = fs.statSync(filePath);
 			if (stat.isDirectory()) {
-				return contentFromDirectory(filePath);
+				return contentFromDirectory(srcDir, from);
 			}
-			return contentFromFile(filePath);
+			return contentFromFile(srcDir, from);
 		},
 		'include': file => fs.readFileSync(path.join(srcDir, file), 'utf8'),
-		'compile': file => compile(path.join(srcDir, file), ctx),
 		'console': console,
 		'config': config,
 		'tween': (arr, value) => {
@@ -138,18 +229,30 @@ function compile(filePath, ctx) {
 	};
 	vm.createContext(ctx);
 
-	try {
-		const indexFile = config.src || "index.html";
-		const index = compile(path.join(srcDir, indexFile), ctx);
-		if (config.out) {
-			const outDir = path.join(rootDir, config.out);
-			if (!fs.existsSync(outDir)) {
-				fs.mkdirSync(outDir);				
+	const indexRelPath = config.src || "index.html";
+
+	const compileQueue = new Queue();
+	compileQueue.enqueue([srcDir, indexRelPath]);
+	const compiler = new Compiler(srcDir, ctx, compileQueue);
+
+	while (!compileQueue.isEmpty()) {
+		let [baseDir, relPath] = compileQueue.dequeue();
+		compiler.cwd = baseDir;
+		try {
+			let file = compiler.compile(relPath);
+			if (config.out) {
+				const outDir = path.join(rootDir, config.out);
+				if (file instanceof Array) {
+					relPath = file[1];
+					file = file[0];
+				}
+				const outPath = path.join(outDir, relPath);
+				mkdirRSync(path.dirname(outPath));
+				await writeFile(outPath, file.html())
+				console.log("updated", outPath);
 			}
-			await writeFile(path.join(outDir, 'index.html'), index.html())
-			console.log("updated", outDir);
+		} catch (err) {
+			console.log("error compiling", err)
 		}
-	} catch (err) {
-		console.log("error compiling", err)
 	}
 })();
