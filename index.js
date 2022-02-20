@@ -140,10 +140,24 @@ class Compiler {
 		// extend ctx
 		this.vmCtx.compile = this.compile.bind(this);
 		this.vmCtx.compileDyn = this.compileDyn.bind(this);
+		this.vmCtx.include = this.include.bind(this);
 	}
 
 	compileDyn(filePath) {
 		return this.compile(filePath, {dynamic: true})
+	}
+
+	include(includePath) {
+		const filePath = path.join(this.srcDir, includePath);
+		const stat = fs.statSync(filePath);
+		if (stat.isDirectory()) {
+			const dirPath = filePath;
+			fs.readdirSync(dirPath).map(fileInDirPath => {
+				this.include(path.join(includePath, fileInDirPath));
+			})
+			return;
+		}
+		this.compileQueue.enqueue([this.cwd, includePath]);
 	}
 
 	compile(filePath, opts={}) {
@@ -200,11 +214,21 @@ class Compiler {
 						this.compileQueue.enqueue([this.cwd, ref]);						
 					}
 				})
+				data('img[compile-ref]').each((idx, t) => {
+					if (!this.compileQueue) {
+						return;
+					}
+					const src = cheerio(t).attr('src');
+					cheerio(t).removeAttr('compile-ref');
+					if (!this.cache[path.join(this.cwd, src)]) {
+						this.compileQueue.enqueue([this.cwd, src]);
+					}
+				})
 				result = data.html();
 				break;
 			};
-			case '.css': {
-				result = fs.readFileSync(absPath, 'utf8');
+			case '.css', '.png': {
+				result = fs.readFileSync(absPath, 'binary');
 				break;
 			};
 			default:
@@ -247,7 +271,6 @@ class Compiler {
 			}
 			return contentFromFile(srcDir, from);
 		},
-		'include': file => fs.readFileSync(path.join(srcDir, file), 'utf8'),
 		'console': console,
 		'config': config,
 		'tween': (arr, value) => {
@@ -289,7 +312,7 @@ class Compiler {
 				}
 				const outPath = path.join(outDir, relPath);
 				mkdirRSync(path.dirname(outPath));
-				await writeFile(outPath, file)
+				await writeFile(outPath, file, {encoding: 'binary'})
 				console.info("updated", outPath);
 			}
 		} catch (err) {
