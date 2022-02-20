@@ -147,12 +147,22 @@ class Compiler {
 		return this.compile(filePath, {dynamic: true})
 	}
 
-	include(includePath) {
+	include(includePath, opt) {
 		const filePath = path.join(this.srcDir, includePath);
 		const stat = fs.statSync(filePath);
 		if (stat.isDirectory()) {
 			const dirPath = filePath;
-			return fs.readdirSync(dirPath).map(fileInDirPath => {
+			return fs.readdirSync(dirPath).filter(fileInDirPath => {
+				if (opt.excludeExt) {
+					let ext = fileInDirPath.startsWith(".") ? fileInDirPath : path.extname(fileInDirPath);
+					ext = ext.slice(1).toLowerCase();
+					const shouldInclude = opt.excludeExt.filter(excludeExt => {
+					  return excludeExt.toLowerCase() === ext;
+					}).length == 0;
+					return shouldInclude;
+				}
+				return true;
+			}).map(fileInDirPath => {
 				const filePath = path.join(includePath, fileInDirPath);
 				this.include(path.join(filePath));
 				return filePath;
