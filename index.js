@@ -152,12 +152,14 @@ class Compiler {
 		const stat = fs.statSync(filePath);
 		if (stat.isDirectory()) {
 			const dirPath = filePath;
-			fs.readdirSync(dirPath).map(fileInDirPath => {
-				this.include(path.join(includePath, fileInDirPath));
-			})
-			return;
+			return fs.readdirSync(dirPath).map(fileInDirPath => {
+				const filePath = path.join(includePath, fileInDirPath);
+				this.include(path.join(filePath));
+				return filePath;
+			}).flat();
 		}
 		this.compileQueue.enqueue([this.cwd, includePath]);
+		return includePath;
 	}
 
 	compile(filePath, opts={}) {
@@ -166,7 +168,7 @@ class Compiler {
 			return this.cache[absPath];
 		}
 		let result;
-		switch (path.extname(filePath)) {
+		switch (path.extname(filePath).toLowerCase()) {
 			case '.md': {
 				const content = contentFromFile(this.cwd, filePath);
 				if (!content.template) {
@@ -227,7 +229,9 @@ class Compiler {
 				result = data.html();
 				break;
 			};
-			case '.css', '.png': {
+			case '.css':
+			case '.png':
+			case '.jpg': {
 				result = fs.readFileSync(absPath, 'binary');
 				break;
 			};
