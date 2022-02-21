@@ -77,6 +77,13 @@ class Contents extends Array {
 			n = this.length;
 		}
 		return this
+			.map(d => {
+				if (d[by]) {
+					return d;
+				}
+				d[by] = new Date() + "";
+				return d;
+			})
 			.sort((left, right) => {
 		        const ld = new Date(left[by]);
 		        const rd = new Date(right[by]);
