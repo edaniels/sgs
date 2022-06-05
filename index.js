@@ -248,7 +248,8 @@ class Compiler {
 			};
 			case '.css':
 			case '.png':
-			case '.jpg': {
+			case '.jpg':
+			case '.jpeg': {
 				result = fs.readFileSync(absPath, 'binary');
 				break;
 			};
